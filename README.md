@@ -8,7 +8,7 @@ hunt for cryptic file names in a large directory structure.  My game collection
 has meta data files that include attributes like year, genre, author, and full 
 description of the game.
 
-![alt text](https://raw.githubusercontent.com/randyrossi/c64-game-menu/master/sample.png)
+![alt text](https://raw.githubusercontent.com/randyrossi/c64-games-menu/master/sample.png)
 
 I organized the collection under directories with names 'a'-'z' + '0' for 
 games that start with a digit.  I then constructed my index files.  This 
