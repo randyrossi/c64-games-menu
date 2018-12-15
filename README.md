@@ -36,15 +36,15 @@ Just type make to get 'menu'
 
 Usage:
 
-LOAD "MENU",8
-RUN
+    LOAD "MENU",8
+    RUN
 
-LEFT/RIGHT = MOVE TO NEXT/PREV LETTER
-UP/DOWN    = MOVE TO PREV/NEXT GAME
-SPACE      = NEXT PAGE
-<-         = PREV PAGE
-ENTER      = MOUNT THE .D64 IMAGE AND LOAD DIRECTORY
-*          = MOUNT THE .D64 IMAGE AND LOAD "*",8,1
+    LEFT/RIGHT = MOVE TO NEXT/PREV LETTER
+    UP/DOWN    = MOVE TO PREV/NEXT GAME
+    SPACE      = NEXT PAGE
+    <-         = PREV PAGE
+    ENTER      = MOUNT THE .D64 IMAGE AND LOAD DIRECTORY
+    ASTERISK   = MOUNT THE .D64 IMAGE AND LOAD "*",8,1
 
 I've included my index files (but obviously, not the games) as a
 demonstration.  I didn't filter out the .p00 files so ignore those. This
