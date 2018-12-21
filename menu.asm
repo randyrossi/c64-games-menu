@@ -1,10 +1,10 @@
 !to "menu",cbm
 
 ; A simple game browser for the C64 that works with
-; pi1541. The menu lets you page through a large index
-; with game descriptions, directory names and .d64 image
-; names. Games must be organized under directories
-; named with a single char (0abcd...etc)
+; pi1541 or sd2iec. The menu lets you page through a
+; large index with game descriptions, directory names
+; and .d64 image names. Games must be organized under
+; directories ; named with a single char (0abcd...etc)
 
 ; Index file format
 ; Filename: letter-pagenum  i.e. a-3
@@ -29,6 +29,7 @@ IMAGELEN   = $1017 ; 1 length of image string
 DESCLEN    = $1018 ; 1 length of description string
 DIRNAMELEN = $1019 ; 1 length of dirname string
 DIR_OR_RUN = $101a ; 1 flag for enter vs *
+DRIVENUM   = $101b ; 1 device number to use
 DESCRIP    = $1020 ; 40 description string
 IMAGENAME  = $1048 ; 20 image string
 DIRNAME    = $105c ; 10 directory string
@@ -38,10 +39,17 @@ LINE       = $1082 ; 1 tmp for iterating, holds max row for cur page
 LASTFLAG   = $1083 ; 1 1=last entry in page, ff=last entry and last page
 FILENAME   = $1084 ; 10 scratch space for filename
 
-BASIC:  !BYTE $0B,$08,$01,$00,$9E,$32,$30,$36,$31,$00,$00,$00
-        ;Adds BASIC line: 1 SYS 2061
+; Change the $38 after the $2c to the drive number (in petscii)
+; you want this program to default to.
+BASIC:  !BYTE $0B,$08,$01,$00,$9E,$32,$30,$36,$33,$2c,$38,$00,$00,$00
+        ;Adds BASIC line: 1 SYS 2063,8
 
 MAIN:
+	; grab parameter from sys to change drive number we will use
+        JSR     $AEFD         ; check for comma
+        JSR     $B79E         ; get 8-bit parameter into X
+	JSR     SETDRIVE
+
 	; set screen colors
         LDA     #$00
         STA     $D020
@@ -100,8 +108,14 @@ LOADCURPAGE:
         JSR     $FFD2           ;CHAR OUT
         LDA     #144            ;BLK (to hide the loading message)
         JSR     $FFD2           ;CHAR OUT
-        LDA     #$ff            ;set c800 to ff in case load fails
-        STA     $c800           ;to signal end of data
+        LDA     #$0d            ;set c800 to empty entry in case load fails
+        STA     $c800
+        LDA     #$0d
+        STA     $c801
+        LDA     #$0d
+        STA     $c802
+        LDA     #$ff
+        STA     $c803
 	LDA     FNLEN           ;FILE NAME LENGTH
         LDX     #<FILENAME
         LDY     #>FILENAME
@@ -117,7 +131,7 @@ TOPMENU:
         BNE     TOPMENU
 
 	; also print filename top right
-        LDY     #8
+        LDY     #4
 PRSPC:
 	LDA     #$20 ; space
 	JSR     $FFD2
@@ -132,6 +146,15 @@ PRINTFN:
 	INX
 	DEY
 	BNE     PRINTFN
+
+; show drive num in upper right corner
+	LDA     DRVO
+        STA     $426
+	LDA     DRVO2
+        STA     $427
+	LDA     #1
+	STA     $d827
+	STA     $d826
 
         ; highlight current letter
         LDY CURLETTER
@@ -208,6 +231,8 @@ WAITKEY:
 	BEQ     KENTER
 	CMP     #$2a
 	BEQ     KASTERISK
+	CMP     #$2c
+	BEQ     KNEXTDRIVE
 	CMP     #$41
 	BCS     KLET   ; >=41 ? handle letter key
 	JMP     HANDLEKEY
@@ -236,6 +261,8 @@ KASTERISK:
 	LDA #1
 	STA DIR_OR_RUN
 	JMP ENTER
+KNEXTDRIVE:
+	JMP NEXTDRIVE
 
 ; begin key handling routines
 
@@ -311,7 +338,7 @@ ENTER3:
         LDA     EXECUTE3,Y
         JSR     $FFD2           ;CHAR OUT
         INY
-        CPY     #19             ; num chars
+        CPY     #20             ; num chars
         BNE     ENTER3
 	JMP     DORETURNS
 
@@ -321,7 +348,7 @@ ENTER4:
         LDA     EXECUTE4,Y
         JSR     $FFD2           ;CHAR OUT
         INY
-        CPY     #20             ; num chars
+        CPY     #21             ; num chars
         BNE     ENTER4
 	
 DORETURNS:
@@ -441,6 +468,20 @@ BACK:
 	DEC CURPAGE
 BACK2:
 	JMP BEGIN
+
+NEXTDRIVE:
+	INC DRIVENUM
+	LDA DRIVENUM
+	CMP #13
+	BCS DRIVEWRAP  ; A >= 13?
+DODRIVE:
+	STA DRIVENUM
+	TAX
+	JSR SETDRIVE
+	JMP BEGIN
+DRIVEWRAP:
+	LDA #8
+	JMP DODRIVE
 
 ; copy desc to destination line of screen
 ; accum has line num
@@ -611,7 +652,7 @@ REVLOOP:
 LOADPAGE:
 	JSR $FFBD ; SETNAM
 	LDA #4    ; logical num
-	LDX #8    ; drive 8
+	LDX DRIVENUM  ; drive was set by sys
 	LDY #1    ; secondary
 	JSR $FFBA ; SETLFS
 	LDA #0    ; LOAD = 0, VERIFY = 1
@@ -636,6 +677,43 @@ ISCHAR1:
 IGNORE:
 	RTS
 	
+; X expected to have drive number desired
+SETDRIVE:
+	STX     DRIVENUM
+        ; also store drive num as petscii in memory for
+        ; the load steps
+        TXA
+        CMP     #10
+        BCS     TWODIGDRIVE      ; drive >= 10
+	; single digit for drive
+	ADC     #$30   ; to petscii
+	STA     DRVO2
+	STA     DRVLO2
+	STA     DRVLI2
+	LDA     #$20   ; space for first digit
+	STA     DRVO
+	STA     DRVLO
+	STA     DRVLI
+	RTS
+TWODIGDRIVE
+	LDX     #0
+TWODIGDRIVE2:
+	; how many times can we subtract 10?
+	INX
+	CLD
+	SBC    #$0a
+        CMP    #$0a
+        BCS    TWODIGDRIVE2      ; A >= 10
+	ADC    #$30
+	STA    DRVO2
+	STA    DRVLO2
+	STA    DRVLI2
+	LDA    #$31
+	; first digit becomes 1 (only support up to 19)
+	STA    DRVO
+	STA    DRVLO
+	STA    DRVLI
+	RTS
 
 ; addresses for start of every screen line char cell
 SCREEN: !BYTE $04,$00,$04,$28,$04,$50,$04,$78,$04,$a0
@@ -670,7 +748,12 @@ EXECUTE1:   ;26
 	!BYTE   147,17,17
 	!pet    "new"
 	!BYTE   13,13,13
-	!pet    "open1,8,15,"
+	!pet    "open1,"
+DRVO: ;becomes first digit of drive num
+        !pet " "
+DRVO2: ;becomes second digit of drive num
+        !pet "?"
+        !pet ",15,"
 	!BYTE   34
 	!pet    "cd://"
 
@@ -681,22 +764,31 @@ EXECUTE2:   ;30 bytes
 	!pet    ":close1:for i=1to2200:next"
 	!BYTE   13,13,13
 
-EXECUTE3:   ;19 bytes
+EXECUTE3:   ;20 bytes
 	!pet    "load"
 	!BYTE   34
 	!pet    "$"
 	!BYTE   34
-	!pet    ",8"
+	!pet    ","
+DRVLI: ; becomes first digit of drive num
+	!pet    " "
+DRVLI2: ; becomes first digit of drive num
+	!pet    "?"
 	!BYTE   13,13,13,13,13
 	!pet    "list"
 	!BYTE   19
 
-EXECUTE4:  ;20 bytes
+EXECUTE4:  ;21 bytes
 	!pet    "load"
 	!BYTE   34
 	!pet    "*"
 	!BYTE   34
-	!pet    ",8,1"
+	!pet    ","
+DRVLO: ; becomes first digit of drive num
+        !pet    " "
+DRVLO2: ; becomes second digit of drive num
+        !pet    "?"
+        !pet    ",1"
 	!BYTE   13,13,13,13,13
 	!pet    "run"
 	!BYTE   19
